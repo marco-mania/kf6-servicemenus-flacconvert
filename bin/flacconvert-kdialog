@@ -1,0 +1,309 @@
+#!/bin/bash
+#
+#  Part of kf5-servicemenus-flacconvert
+#  Copyright (c) 2021-2023 by Marco Nelles <dev at maniatek dot de>
+#
+#  This program is free software: you can redistribute it and/or modify
+#  it under the terms of the GNU General Public License as published by
+#  the Free Software Foundation, either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU General Public License for more details.
+#
+#  You should have received a copy of the GNU General Public License
+#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
+#
+
+readonly PROGNAME=$(basename $0)
+
+function help() {
+
+    echo "Convert (lossless) FLAC files to (lossy) MP3 or Opus files.
+
+Usage: ${PROGNAME} \$command --
+
+Commands:
+    help, -h, --help
+        Show this help text
+
+    convert <\$format|custom> [\$bitrate|\$quality_preset]
+        Convert audiofile(s) to the desired format. Format can be MP3 or Opus.
+        Bitrate is kbps. If you select custom format you must not set the
+        bitrate.
+        Quality presets for LAME:
+          7 (~100 kbps)
+          6 (~115 kbps)
+          5 (~130 kbps, transparent for a majority users)
+          4 (~165 kbps, transparent for most users)
+          3 (~175 kbps)
+          2 (~190 kbps, transparent)
+          1 (~225 kbps)
+          0 (~245 kbps)
+        Bitrate range for Opus (kbps): 5-510
+
+Examples:
+    ${PROGNAME} convert mp3 0 /path/to/song1.flac
+    ${PROGNAME} convert opus 128 /path/to/song1.flac /path/to/song2.flac
+    ${PROGNAME} convert custom /path/to/song1.flac /path/to/song2.flac
+"
+
+}
+
+## language
+
+function load_lang() {
+
+    case $1 in
+        en_US | *)
+
+            msg_common_dependency_check_failed_title="Dependency check failed"
+            msg_common_kdialog_not_found_text="kdialog not found. Assuming KDE environment."
+            msg_common_flac_not_found_text="FLAC not found."
+            msg_common_lame_not_found_text="LAME not found."
+            msg_common_opus_not_found_text="opus-tools not found."
+
+            msg_common_abort="Operation interrupted by user."
+            msg_common_overwrite_text="Do you want to overwrite the original file(s)? Otherwise a new file with a filename suffix will be created."
+            msg_common_overwrite_yes="YES, OVERWRITE"
+            msg_common_overwrite_no="No, create new files"
+            msg_common_progress_text="Processing file \$i of \$file_count \(\$basename_file\)"
+            msg_common_start="Starting."
+            msg_common_finish_ok="Done."
+            msg_common_finish_error="An error has occurred."
+            msg_common_file_not_found="File \$basename_file not found."
+            msg_common_command_not_found_text="The requested command \$command is not implemented."
+
+            msg_convert_title="Conversion of audio files"
+            msg_convert_format_input_text="Choose the format you want:"
+            msg_convert_bitrate_input_text="Choose the bitrate in kbps:"
+            msg_convert_qualitypreset_input_text="Choose the quality preset:\n(*) transparent"
+            msg_convert_finish_title="Conversion of \$basename_file"
+
+            ;;
+    esac
+
+}
+
+load_lang ${LANGUAGE%%:*}
+
+## check dependencies
+
+kdialog_bin=$(which kdialog)
+if [ -z "${kdialog_bin}" ]; then
+    echo "${msg_common_kdialog_not_found_text}"
+    exit 1
+fi
+
+flac_bin=$(which flac)
+if [ -z "${flac_bin}" ]; then
+    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_flac_not_found_text}"
+    exit 2
+fi
+
+metaflac_bin=$(which metaflac)
+if [ -z "${metaflac_bin}" ]; then
+    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_flac_not_found_text}"
+    exit 2
+fi
+
+lame_bin=$(which lame)
+if [ -z "${lame_bin}" ]; then
+    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_lame_not_found_text}"
+    exit 2
+fi
+
+opusenc_bin=$(which opusenc)
+if [ -z "${opusenc_bin}" ]; then
+    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_opus_not_found_text}"
+    exit 2
+fi
+
+qdbus_bin=$(which qdbus)
+if [ -z "${qdbus_bin}" ]; then
+    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_qdbus_not_found_text}"
+    exit 2
+fi
+
+# optionally for cover handling
+mogrify_bin=$(which mogrify)
+
+## exec functions
+
+exec_convert () {
+
+    local inputfile="$1"
+    local format="$FORMAT"
+    local bitrate=$BITRATE
+
+    local dir=$(dirname -- "${inputfile}")
+    local name="${inputfile##*/}"
+    local base="${name%.*}"
+    local ext="${name##*.}"
+
+    # get the tags
+    local artist=$("${metaflac_bin}" "${inputfile}" --show-tag=artist | sed s/.*=//g)
+    local title=$("${metaflac_bin}" "${inputfile}" --show-tag=TITLE | sed s/.*=//g)
+    local album=$("${metaflac_bin}" "${inputfile}" --show-tag=ALBUM | sed s/.*=//g)
+    local genre=$("${metaflac_bin}" "${inputfile}" --show-tag=GENRE | sed s/.*=//g)
+    local tracknum=$("${metaflac_bin}" "${inputfile}" --show-tag=TRACKNUMBER | sed s/.*=//g)
+    local date=$("${metaflac_bin}" "${inputfile}" --show-tag=DATE | sed s/.*=//g)
+
+    # get the cover
+    cover_filename="$(mktemp -u)"
+    "${metaflac_bin}" --export-picture-to="${cover_filename}" "${inputfile}"
+    if [ -f "${cover_filename}" ] && [ ! -z "${mogrify_bin}" ]; then
+        "${mogrify_bin}" -resize 1000 "${cover_filename}"
+        "${mogrify_bin}" -format jpg "${cover_filename}"
+        "${mogrify_bin}" -filter Triangle -define filter:support=2 -unsharp 0.25x0.25+8+0.065 -dither None -posterize 136 -quality 82 -define jpeg:fancy-upsampling=off -define png:compression-filter=5 -define png:compression-level=9 -define png:compression-strategy=1 -define png:exclude-chunk=all -colorspace sRGB -strip -interlace Plane "${cover_filename}"
+    fi
+
+    local cover_switch=""
+    if [ "$format" == "mp3" ]; then
+        if [ -f "${cover_filename}" ]; then
+            "${flac_bin}" -s -c -d "${inputfile}" | "${lame_bin}" -V ${bitrate} --add-id3v2 --pad-id3v2 --ignore-tag-errors --ta "${artist}" --tt "${title}" --tl "${album}"  --tg "${genre:-12}" --tn "${tracknum:-0}" --ty "${date}" --ti "${cover_filename}" - "${dir}/${base}.mp3"
+        else
+            "${flac_bin}" -s -c -d "${inputfile}" | "${lame_bin}" -V ${bitrate} --add-id3v2 --pad-id3v2 --ignore-tag-errors --ta "${artist}" --tt "${title}" --tl "${album}"  --tg "${genre:-12}" --tn "${tracknum:-0}" --ty "${date}" - "${dir}/${base}.mp3"
+        fi
+    elif [ "$format" == "opus" ]; then
+        if [ -f "${cover_filename}" ]; then
+            "${flac_bin}" -s -c -d "${inputfile}" | "${opusenc_bin}" --bitrate ${bitrate} --downmix-stereo --artist "${artist}" --title "${title}" --album "${album}" --genre "${genre}" --comment "TRACKNUMBER=${tracknum}" --date "${date}" --picture "${cover_filename}" - "${dir}/${base}.opus"
+        else
+            "${flac_bin}" -s -c -d "${inputfile}" | "${opusenc_bin}" --bitrate ${bitrate} --downmix-stereo --artist "${artist}" --title "${title}" --album "${album}" --genre "${genre}" --comment "TRACKNUMBER=${tracknum}" --date "${date}" - "${dir}/${base}.opus"
+        fi
+    fi
+
+    if [ -f "${cover_filename}" ]; then
+        rm "${cover_filename}"
+    fi
+
+    return $?
+
+}
+
+overwrite_question() {
+
+    "${kdialog_bin}" --icon configure --title "${msg_title}" --warningyesno "${msg_common_overwrite_text}" --yes-label "${msg_common_overwrite_no}" --no-label "${msg_common_overwrite_yes}"
+    rc=$?
+
+    if [ $rc -eq 1 ]; then
+        overwrite=true
+    else
+        if [ $rc -eq 0 ]; then
+            overwrite=false
+        else
+            {
+                "${kdialog_bin}" --title "${msg_title}" --passivepopup "${msg_common_abort}" 5
+                exit 2
+            }
+        fi
+    fi
+
+}
+
+iterate_files () {
+
+    if [ "${ask_overwrite}" = true ]; then
+        overwrite_question
+    fi
+
+    file_count=$#
+    dbus_ref=$(kdialog --icon configure --title "${msg_title}" --progressbar "${msg_common_start}" $file_count)
+    ${qdbus_bin} $dbus_ref org.kde.kdialog.ProgressDialog.showCancelButton true
+    i=1
+
+    while [[ "false" == "$(${qdbus_bin} $dbus_ref org.kde.kdialog.ProgressDialog.wasCancelled 2>/dev/null)" && $i -le $file_count ]]; do
+
+        local file="${!i}"
+        local basename_file="$(basename "$file")"
+
+        if [ ! -f "${file}" ]; then
+            "${kdialog_bin}" --title --icon configure "${msg_title}" --error "$(eval echo "${msg_common_file_not_found}")"
+            break
+        fi
+        ${qdbus_bin} $dbus_ref org.kde.kdialog.ProgressDialog.setLabelText "$(eval echo "${msg_common_progress_text}")"
+
+        case $command in
+        convert)
+            exec_convert "${file}"
+            ;;
+        esac
+
+        rc=$?
+        if [ $rc -eq 0 ]; then
+            "${kdialog_bin}" --title "${msg_finish_title}" --passivepopup "${msg_common_finish_ok}" 5
+        else
+            ${qdbus_bin} $dbus_ref close
+            "${kdialog_bin}" --icon configure --title "${msg_finish_title}" --detailederror "${msg_common_finish_error}" "${OUTPUT}"
+            exit 1
+        fi
+
+        ${qdbus_bin} $dbus_ref org.freedesktop.DBus.Properties.Set org.kde.kdialog.ProgressDialog value $i
+
+        i=$(($i + 1))
+
+    done
+
+    ${qdbus_bin} $dbus_ref close 2>/dev/null
+
+}
+
+## init functions
+
+init_convert () {
+
+    local value="${1}"
+    shift
+
+    if [ "${value}" == "custom" ]; then
+        FORMAT=$("${kdialog_bin}" --icon configure --title "${msg_title}" --combobox "${msg_convert_format_input_text}" "mp3" "opus" --default "mp3") || \
+            { "${kdialog_bin}" --title "${msg_title}" --passivepopup "${msg_common_abort}" 5 && exit 2; }
+        if [ "$FORMAT" == "mp3" ]; then
+          BITRATE=$("${kdialog_bin}" --icon configure --title "${msg_title}" --combobox "${msg_convert_qualitypreset_input_text}" "7 (~100 kbps)" "6 (~115 kbps)" "5 (~130 kbps)" "4 (~165 kbps)" "3 (~175 kbps)" "2 (~190 kbps)(*)" "1 (~225 kbps)" "0 (~245 kbps)" --default "2 (~190 kbps)(*)") || \
+            { "${kdialog_bin}" --title "${msg_title}" --passivepopup "${msg_common_abort}" 5 && exit 2; }
+          BITRATE=${BITRATE:0:1}
+        else
+          BITRATE=$("${kdialog_bin}" --icon configure --title "${msg_title}" --inputbox "${msg_convert_bitrate_input_text}") || \
+            { "${kdialog_bin}" --title "${msg_title}" --passivepopup "${msg_common_abort}" 5 && exit 2; }
+        fi
+    else
+        FORMAT="${value}"
+        BITRATE="${1}"
+        shift
+    fi
+
+    iterate_files "${@}"
+
+}
+
+
+## main part
+
+command="${1}"
+shift
+
+flag_ask_overwrite=false
+
+if [ -z "$command" ]; then
+    help
+    exit 0
+fi
+
+case $command in
+help | -h | --help)
+    help
+    exit 0
+    ;;
+convert)
+    msg_title="$msg_convert_title"
+    init_convert "${@}"
+    ;;
+*)
+    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "$(eval echo "${msg_common_command_not_found_text}")"
+    exit 2
+    ;;
+esac
+
+exit 0
