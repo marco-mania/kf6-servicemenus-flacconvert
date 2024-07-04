@@ -29,7 +29,7 @@ In that case the directory `~/.local/bin` has to be be placed in the search path
 environment variable `$PATH`.
 E.g. for a Fish shell you can simply call `fish_add_path ~/.local/bin`.
 Also make sure your .desktop files are execuatable
-`chmod +x ~/.local/share/kio/servicemenus/flacconvert.desktop.desktop`.
+`chmod +x ~/.local/share/kio/servicemenus/flacconvert.desktop`.
 
 Finally you need to restart your plasma session or call:
 
@@ -39,12 +39,12 @@ Finally you need to restart your plasma session or call:
 
 System wide installation:
 
-    sudo rm /usr/share/kio/servicemenus/flacconvert.desktop.desktop
+    sudo rm /usr/share/kio/servicemenus/flacconvert.desktop
     sudo rm /usr/local/bin/flacconvert-kdialog
 
 Per user installation:
 
-    rm ~/.local/share/kio/servicemenus/flacconvert.desktop.desktop
+    rm ~/.local/share/kio/servicemenus/flacconvert.desktop
     rm ~/./local/bin/flacconvert-kdialog
 
 ## Contributing
