@@ -13,7 +13,7 @@ KDE service menus for flac file converting.
 
 Install the requirements (Arch Linux):
 
-    sudo pacman -S lame flac opus-tools qt5-tools
+    sudo pacman -S lame flac opus-tools qt6-tools
 
 To install system wide:
 
