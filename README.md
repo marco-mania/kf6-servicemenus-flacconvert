@@ -1,62 +1,99 @@
-# KDE service menus for flac file converting
+# KDE Service Menus for PDF File Processing
 
-KDE service menus for flac file converting.
+Enhance your PDF file management with KDE service menus, designed for seamless processing.
+
+This project is based on [kde-service-menu-pdf Version 2.3](https://www.egregorion.net/),  
+Copyright (C) 2018-2019 Giuseppe Benigno <giuseppe.benigno@gmail.com>, GPL-3.0+.
+
+---
 
 ## Prerequisites
 
-* [KDE](https://www.kde.org/)
-* [FLAC](https://xiph.org/flac/)
-* [LAME](https://lame.sourceforge.io/)
-* [Opus](https://opus-codec.org/)
+Ensure the following tools are installed to use these service menus:
+
+- [Ghostscript](https://www.ghostscript.com/)  
+- [Poppler](https://poppler.freedesktop.org/)  
+- [PDFtk](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/)  
+- [TeX Live](https://tug.org/texlive/)  
+
+---
 
 ## Installation (Plasma 6)
 
-Install the requirements (Arch Linux):
+### Install Dependencies (Arch Linux)
 
-    sudo pacman -S lame flac opus-tools qt6-tools
+Run the following command to install the required software:
 
-To install system wide:
+```bash
+sudo pacman -S ghostscript texlive-bin poppler pdftk texlive-binextra texlive-latexrecommended
+```
 
-    sudo cp servicemenus/* /usr/share/kio/servicemenus/
-    sudo cp bin/flacconvert-kdialog /usr/local/bin/
+### System-Wide Installation
 
-Per user installation:
+Copy the files to the system directories:
 
-    cp servicemenus/* ~/.local/share/kio/servicemenus/
-    cp bin/flacconvert-kdialog ~/.local/bin
+```bash
+sudo cp servicemenus/* /usr/share/kio/servicemenus/
+sudo cp bin/* /usr/local/bin/
+```
 
-In that case the directory `~/.local/bin` has to be be placed in the search path
-environment variable `$PATH`.
-Also make sure your .desktop files are execuatable
-`chmod +x ~/.local/share/kio/servicemenus/flacconvert.desktop`.
+### Per-User Installation
 
-Finally you need to restart your plasma session or call:
+For a user-specific setup, copy the files as follows:
 
-    kbuildsycoca6
+```bash
+cp servicemenus/* ~/.local/share/kio/servicemenus/
+cp bin/* ~/.local/bin
+```
 
-## Uninstall
+Ensure the `~/.local/bin` directory is included in your `$PATH` environment variable.  
+Additionally, make the `.desktop` files executable:
 
-System wide installation:
+```bash
+chmod +x ~/.local/share/kio/servicemenus/pdf-tools*.desktop
+```
 
-    sudo rm /usr/share/kio/servicemenus/flacconvert.desktop
-    sudo rm /usr/local/bin/flacconvert-kdialog
+Finally, restart your Plasma session or execute the following command:
 
-Per user installation:
+```bash
+kbuildsycoca6
+```
 
-    rm ~/.local/share/kio/servicemenus/flacconvert.desktop
-    rm ~/./local/bin/flacconvert-kdialog
+---
 
-## Reset suppressed overwrite dialog decision
+## Uninstallation
 
-Just delete the file `~/.config/servicemenus-flacconvert`.
-    
+### System-Wide Uninstallation
+
+Remove the installed files:
+
+```bash
+sudo rm /usr/share/kio/servicemenus/pdf-tools*.desktop
+sudo rm /usr/local/bin/pdf-tools-*-kdialog
+```
+
+### Per-User Uninstallation
+
+Delete the corresponding files:
+
+```bash
+rm ~/.local/share/kio/servicemenus/pdf-tools*.desktop
+rm ~/.local/bin/pdf-tools-*-kdialog
+```
+
+---
+
 ## Contributing
 
-Pull requests are welcome. For major changes, please open an issue first to
-discuss what you would like to change.
+Contributions are welcome! Please follow these guidelines:
 
-Please make sure to update tests as appropriate.
+- For major changes, open an issue first to discuss your ideas.
+- Ensure that any required tests are updated as appropriate.
+
+We look forward to your pull requests!
+
+---
 
 ## License
 
-[GPL-3.0+](https://www.gnu.org/licenses/gpl-3.0.de.html)
+This project is licensed under [GPL-3.0+](https://www.gnu.org/licenses/gpl-3.0.html).
