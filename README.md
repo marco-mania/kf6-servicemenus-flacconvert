@@ -46,6 +46,10 @@ Per user installation:
     rm ~/.local/share/kio/servicemenus/flacconvert.desktop
     rm ~/./local/bin/flacconvert-kdialog
 
+## Reset suppressed overwrite dialog decision
+
+Just delete the file `~/.config/servicemenus-flacconvert`.
+    
 ## Contributing
 
 Pull requests are welcome. For major changes, please open an issue first to

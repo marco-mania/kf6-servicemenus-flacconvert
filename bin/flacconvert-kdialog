@@ -193,7 +193,7 @@ exec_convert () {
 
 overwrite_question() {
 
-    "${kdialog_bin}" --icon configure --title "${msg_title}" --warningyesno "${msg_common_overwrite_text}" --yes-label "${msg_common_overwrite_no}" --no-label "${msg_common_overwrite_yes}"
+    "${kdialog_bin}" --icon configure --title "${msg_title}" --dontagain servicemenus-flacconvert:nooverwritemsg --warningyesno "${msg_common_overwrite_text}" --yes-label "${msg_common_overwrite_no}" --no-label "${msg_common_overwrite_yes}"
     rc=$?
 
     if [ $rc -eq 1 ]; then
