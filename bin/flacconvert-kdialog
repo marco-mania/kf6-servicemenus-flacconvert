@@ -21,7 +21,10 @@ readonly PROGNAME=$(basename $0)
 
 function help() {
 
-    echo "Convert (lossless) FLAC files to (lossy) MP3 or Opus files.
+    case $1 in
+        en_US | *)
+
+            echo "Convert (lossless) FLAC files to (lossy) MP3 or Opus files.
 
 Usage: ${PROGNAME} \$command --
 
@@ -49,6 +52,8 @@ Examples:
     ${PROGNAME} convert opus 128 /path/to/song1.flac /path/to/song2.flac
     ${PROGNAME} convert custom /path/to/song1.flac /path/to/song2.flac
 "
+
+    esac
 
 }
 
@@ -290,7 +295,7 @@ shift
 flag_ask_overwrite=false
 
 if [ -z "$command" ]; then
-    help
+    help ${LANGUAGE%%:*}
     exit 0
 fi
 
