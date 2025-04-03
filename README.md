@@ -1,9 +1,6 @@
-# KDE Service Menus for PDF File Processing
+# KDE Service Menus for FLAC Audio File Processing
 
-Enhance your PDF file management with KDE service menus, designed for seamless processing.
-
-This project is based on [kde-service-menu-pdf Version 2.3](https://www.egregorion.net/),  
-Copyright (C) 2018-2019 Giuseppe Benigno <giuseppe.benigno@gmail.com>, GPL-3.0+.
+Convert your FLAC audio files to Opus or MP3 files.
 
 ---
 
@@ -11,10 +8,9 @@ Copyright (C) 2018-2019 Giuseppe Benigno <giuseppe.benigno@gmail.com>, GPL-3.0+.
 
 Ensure the following tools are installed to use these service menus:
 
-- [Ghostscript](https://www.ghostscript.com/)  
-- [Poppler](https://poppler.freedesktop.org/)  
-- [PDFtk](https://www.pdflabs.com/tools/pdftk-the-pdf-toolkit/)  
-- [TeX Live](https://tug.org/texlive/)  
+- [FLAC](https://xiph.org/flac/)
+- [Opus](https://opus-codec.org/downloads/)
+- [LAME](https://lame.sourceforge.io/)
 
 ---
 
@@ -25,7 +21,7 @@ Ensure the following tools are installed to use these service menus:
 Run the following command to install the required software:
 
 ```bash
-sudo pacman -S ghostscript texlive-bin poppler pdftk texlive-binextra texlive-latexrecommended
+sudo pacman -S flac opus lame
 ```
 
 ### System-Wide Installation
@@ -50,7 +46,7 @@ Ensure the `~/.local/bin` directory is included in your `$PATH` environment vari
 Additionally, make the `.desktop` files executable:
 
 ```bash
-chmod +x ~/.local/share/kio/servicemenus/pdf-tools*.desktop
+chmod +x ~/.local/share/kio/servicemenus/flacconvert.desktop
 ```
 
 Finally, restart your Plasma session or execute the following command:
@@ -68,8 +64,8 @@ kbuildsycoca6
 Remove the installed files:
 
 ```bash
-sudo rm /usr/share/kio/servicemenus/pdf-tools*.desktop
-sudo rm /usr/local/bin/pdf-tools-*-kdialog
+sudo rm /usr/share/kio/servicemenus/flacconvert.desktop
+sudo rm /usr/local/bin/flacconvert-kdialog
 ```
 
 ### Per-User Uninstallation
@@ -77,8 +73,8 @@ sudo rm /usr/local/bin/pdf-tools-*-kdialog
 Delete the corresponding files:
 
 ```bash
-rm ~/.local/share/kio/servicemenus/pdf-tools*.desktop
-rm ~/.local/bin/pdf-tools-*-kdialog
+rm ~/.local/share/kio/servicemenus/flacconvert.desktop
+rm ~/.local/bin/flacconvert-kdialog
 ```
 
 ---
