@@ -1,3 +1,9 @@
+<!--
+SPDX-FileCopyrightText: 2021-2026 Marco Nelles <dev at maniatek dot de>
+
+SPDX-License-Identifier: GPL-3.0-or-later
+-->
+
 # KDE Service Menus for FLAC Audio File Processing
 
 Convert your FLAC audio files to Opus or MP3 files.
@@ -8,9 +14,17 @@ Convert your FLAC audio files to Opus or MP3 files.
 
 Ensure the following tools are installed to use these service menus:
 
-- [FLAC](https://xiph.org/flac/)
-- [Opus](https://opus-codec.org/downloads/)
+- [KDE](https://www.kde.org/) (`kdialog`, `qdbus`/`qdbus6`)
+- [FLAC](https://xiph.org/flac/) (`flac`, `metaflac`)
+- [opus-tools](https://opus-codec.org/downloads/) (`opusenc`; the `opus` package alone only ships the library, not the CLI tools)
 - [LAME](https://lame.sourceforge.io/)
+
+Optional (used to resize/reencode/strip an embedded cover image before
+tagging; without it, cover art is skipped entirely rather than embedded
+unprocessed, since an unoptimized cover can easily outweigh the lossy
+audio stream in size):
+
+- [ImageMagick](https://imagemagick.org/index.php) (IM7+, `magick`)
 
 ---
 
@@ -21,7 +35,9 @@ Ensure the following tools are installed to use these service menus:
 Run the following command to install the required software:
 
 ```bash
-sudo pacman -S flac opus lame
+sudo pacman -S flac lame opus-tools kdialog qt6-tools
+# optional, for cover-art post-processing:
+sudo pacman -S imagemagick
 ```
 
 ### System-Wide Installation

@@ -1,23 +1,15 @@
 #!/usr/bin/env bash
 #
-#  Part of kf5-servicemenus-flacconvert
-#  Copyright (c) 2021-2024 by Marco Nelles <dev at maniatek dot de>
+# Part of kf6-servicemenus-flacconvert
 #
-#  This program is free software: you can redistribute it and/or modify
-#  it under the terms of the GNU General Public License as published by
-#  the Free Software Foundation, either version 3 of the License, or
-#  (at your option) any later version.
-#
-#  This program is distributed in the hope that it will be useful,
-#  but WITHOUT ANY WARRANTY; without even the implied warranty of
-#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-#  GNU General Public License for more details.
-#
-#  You should have received a copy of the GNU General Public License
-#  along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
+# SPDX-FileCopyrightText: 2021-2026 Marco Nelles <dev at maniatek dot de>
+# SPDX-License-Identifier: GPL-3.0-or-later
 
-readonly PROGNAME=$(basename $0)
+readonly PROGNAME="$(basename "$0")"
+
+# A flac decode failure must not be hidden by a "successful" exit code from
+# the lame/opusenc stage reading a truncated pipe.
+set -o pipefail
 
 function help() {
 
@@ -67,11 +59,13 @@ function load_lang() {
             msg_common_dependency_check_failed_title="Dependency check failed"
             msg_common_kdialog_not_found_text="kdialog not found. Assuming KDE environment."
             msg_common_flac_not_found_text="FLAC not found."
+            msg_common_metaflac_not_found_text="metaflac not found."
             msg_common_lame_not_found_text="LAME not found."
             msg_common_opus_not_found_text="opus-tools not found."
+            msg_common_qdbus_not_found_text="qdbus (or qdbus6) not found."
 
             msg_common_abort="Operation interrupted by user."
-            msg_common_overwrite_text="Do you want to overwrite the original file(s)? Otherwise a new file with a filename suffix will be created."
+            msg_common_overwrite_text="An output file with this name may already exist. Do you want to overwrite it? Otherwise a new file with a filename suffix will be created. (The source FLAC file is never touched.)"
             msg_common_overwrite_yes="YES, OVERWRITE"
             msg_common_overwrite_no="No, create new files"
             msg_common_progress_text="Processing file \$i of \$file_count \(\$basename_file\)"
@@ -96,47 +90,58 @@ load_lang ${LANGUAGE%%:*}
 
 ## check dependencies
 
-kdialog_bin=$(which kdialog)
+kdialog_bin=$(command -v kdialog)
 if [ -z "${kdialog_bin}" ]; then
     echo "${msg_common_kdialog_not_found_text}"
-    exit 1
+    exit 2
 fi
 
-flac_bin=$(which flac)
+flac_bin=$(command -v flac)
 if [ -z "${flac_bin}" ]; then
     "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_flac_not_found_text}"
     exit 2
 fi
 
-metaflac_bin=$(which metaflac)
+metaflac_bin=$(command -v metaflac)
 if [ -z "${metaflac_bin}" ]; then
-    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_flac_not_found_text}"
+    "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_metaflac_not_found_text}"
     exit 2
 fi
 
-lame_bin=$(which lame)
+lame_bin=$(command -v lame)
 if [ -z "${lame_bin}" ]; then
     "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_lame_not_found_text}"
     exit 2
 fi
 
-opusenc_bin=$(which opusenc)
+opusenc_bin=$(command -v opusenc)
 if [ -z "${opusenc_bin}" ]; then
     "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_opus_not_found_text}"
     exit 2
 fi
 
-qdbus_bin=$(which qdbus)
+qdbus_bin=$(command -v qdbus)
 if [ -z "${qdbus_bin}" ]; then
-    qdbus_bin=$(which qdbus6)
+    qdbus_bin=$(command -v qdbus6)
     if [ -z "${qdbus_bin}" ]; then
         "${kdialog_bin}" --icon configure --title "${msg_common_dependency_check_failed_title}" --error "${msg_common_qdbus_not_found_text}"
         exit 2
     fi
 fi
 
-# optionally for cover handling
-mogrify_bin=$(which mogrify)
+# optional, for cover-art post-processing (resize/reencode/strip) only
+mogrify_bin=$(command -v mogrify)
+magick_bin=$(command -v magick)
+
+# Runs ImageMagick regardless of whether only the IM7+ "magick" binary or
+# the legacy standalone "mogrify" is installed. No-op if neither is present.
+run_mogrify() {
+    if [ -n "${magick_bin}" ]; then
+        "${magick_bin}" mogrify "$@"
+    elif [ -n "${mogrify_bin}" ]; then
+        "${mogrify_bin}" "$@"
+    fi
+}
 
 ## exec functions
 
@@ -151,43 +156,65 @@ exec_convert () {
     local base="${name%.*}"
     local ext="${name##*.}"
 
-    # get the tags
-    local artist=$("${metaflac_bin}" "${inputfile}" --show-tag=artist | sed s/.*=//g)
-    local title=$("${metaflac_bin}" "${inputfile}" --show-tag=TITLE | sed s/.*=//g)
-    local album=$("${metaflac_bin}" "${inputfile}" --show-tag=ALBUM | sed s/.*=//g)
-    local genre=$("${metaflac_bin}" "${inputfile}" --show-tag=GENRE | sed s/.*=//g)
-    local tracknum=$("${metaflac_bin}" "${inputfile}" --show-tag=TRACKNUMBER | sed s/.*=//g)
-    local date=$("${metaflac_bin}" "${inputfile}" --show-tag=DATE | sed s/.*=//g)
-
-    # get the cover
-    cover_filename="$(mktemp -u)"
-    "${metaflac_bin}" --export-picture-to="${cover_filename}" "${inputfile}"
-    if [ -f "${cover_filename}" ] && [ ! -z "${mogrify_bin}" ]; then
-        "${mogrify_bin}" -resize 1000 "${cover_filename}"
-        "${mogrify_bin}" -format jpg "${cover_filename}"
-        "${mogrify_bin}" -filter Triangle -define filter:support=2 -unsharp 0.25x0.25+8+0.065 -dither None -posterize 136 -quality 82 -define jpeg:fancy-upsampling=off -define png:compression-filter=5 -define png:compression-level=9 -define png:compression-strategy=1 -define png:exclude-chunk=all -colorspace sRGB -strip -interlace Plane "${cover_filename}"
+    local outputfile
+    if [ "${overwrite}" = true ]; then
+        outputfile="${dir}/${base}.${format}"
+    else
+        outputfile="${dir}/${base}_${bitrate}.${format}"
     fi
 
-    local cover_switch=""
-    if [ "$format" == "mp3" ]; then
-        if [ -f "${cover_filename}" ]; then
-            "${flac_bin}" -s -c -d "${inputfile}" | "${lame_bin}" -V ${bitrate} --add-id3v2 --pad-id3v2 --ignore-tag-errors --ta "${artist}" --tt "${title}" --tl "${album}"  --tg "${genre:-12}" --tn "${tracknum:-0}" --ty "${date}" --ti "${cover_filename}" - "${dir}/${base}.mp3"
+    # get the tags
+    local artist=$("${metaflac_bin}" "${inputfile}" --show-tag=artist | sed 's/^[^=]*=//')
+    local title=$("${metaflac_bin}" "${inputfile}" --show-tag=TITLE | sed 's/^[^=]*=//')
+    local album=$("${metaflac_bin}" "${inputfile}" --show-tag=ALBUM | sed 's/^[^=]*=//')
+    local genre=$("${metaflac_bin}" "${inputfile}" --show-tag=GENRE | sed 's/^[^=]*=//')
+    local tracknum=$("${metaflac_bin}" "${inputfile}" --show-tag=TRACKNUMBER | sed 's/^[^=]*=//')
+    local date=$("${metaflac_bin}" "${inputfile}" --show-tag=DATE | sed 's/^[^=]*=//')
+
+    # Get the cover and, in a single pass, resize/reencode/strip it to a
+    # small JPEG. The temp file is created with a .jpg suffix up front (not
+    # via the race-prone "mktemp -u") so that one "-format jpg" call also
+    # converts a non-JPEG (e.g. PNG) embedded cover in place, instead of
+    # silently writing an orphaned sibling file that was never used.
+    #
+    # Cover handling is entirely gated on ImageMagick being available: an
+    # embedded cover can easily be several MB unprocessed (a multi-megapixel
+    # PNG, say), which would defeat the point of a lossy conversion. Without
+    # ImageMagick to shrink/reencode it, skip the cover rather than embed it
+    # raw.
+    cover_filename=""
+    if [ -n "${magick_bin}" ] || [ -n "${mogrify_bin}" ]; then
+        cover_filename="$(mktemp --suffix=.jpg)"
+        "${metaflac_bin}" --export-picture-to="${cover_filename}" "${inputfile}" 2>/dev/null
+        if [ -s "${cover_filename}" ]; then
+            run_mogrify -resize 1000 -filter Triangle -define filter:support=2 -unsharp 0.25x0.25+8+0.065 -dither None -posterize 136 -quality 82 -define jpeg:fancy-upsampling=off -colorspace sRGB -strip -interlace Plane -format jpg "${cover_filename}"
         else
-            "${flac_bin}" -s -c -d "${inputfile}" | "${lame_bin}" -V ${bitrate} --add-id3v2 --pad-id3v2 --ignore-tag-errors --ta "${artist}" --tt "${title}" --tl "${album}"  --tg "${genre:-12}" --tn "${tracknum:-0}" --ty "${date}" - "${dir}/${base}.mp3"
+            rm -f "${cover_filename}"
+            cover_filename=""
+        fi
+    fi
+
+    if [ "$format" == "mp3" ]; then
+        if [ -n "${cover_filename}" ]; then
+            OUTPUT=$("${flac_bin}" -s -c -d "${inputfile}" 2>&1 | "${lame_bin}" -V ${bitrate} --add-id3v2 --pad-id3v2 --ignore-tag-errors --ta "${artist}" --tt "${title}" --tl "${album}"  --tg "${genre:-12}" --tn "${tracknum:-0}" --ty "${date}" --ti "${cover_filename}" - "${outputfile}" 2>&1)
+        else
+            OUTPUT=$("${flac_bin}" -s -c -d "${inputfile}" 2>&1 | "${lame_bin}" -V ${bitrate} --add-id3v2 --pad-id3v2 --ignore-tag-errors --ta "${artist}" --tt "${title}" --tl "${album}"  --tg "${genre:-12}" --tn "${tracknum:-0}" --ty "${date}" - "${outputfile}" 2>&1)
         fi
     elif [ "$format" == "opus" ]; then
-        if [ -f "${cover_filename}" ]; then
-            "${flac_bin}" -s -c -d "${inputfile}" | "${opusenc_bin}" --bitrate ${bitrate} --downmix-stereo --artist "${artist}" --title "${title}" --album "${album}" --genre "${genre}" --comment "TRACKNUMBER=${tracknum}" --date "${date}" --picture "${cover_filename}" - "${dir}/${base}.opus"
+        if [ -n "${cover_filename}" ]; then
+            OUTPUT=$("${flac_bin}" -s -c -d "${inputfile}" 2>&1 | "${opusenc_bin}" --bitrate ${bitrate} --downmix-stereo --artist "${artist}" --title "${title}" --album "${album}" --genre "${genre}" --comment "TRACKNUMBER=${tracknum}" --date "${date}" --picture "${cover_filename}" - "${outputfile}" 2>&1)
         else
-            "${flac_bin}" -s -c -d "${inputfile}" | "${opusenc_bin}" --bitrate ${bitrate} --downmix-stereo --artist "${artist}" --title "${title}" --album "${album}" --genre "${genre}" --comment "TRACKNUMBER=${tracknum}" --date "${date}" - "${dir}/${base}.opus"
+            OUTPUT=$("${flac_bin}" -s -c -d "${inputfile}" 2>&1 | "${opusenc_bin}" --bitrate ${bitrate} --downmix-stereo --artist "${artist}" --title "${title}" --album "${album}" --genre "${genre}" --comment "TRACKNUMBER=${tracknum}" --date "${date}" - "${outputfile}" 2>&1)
         fi
     fi
 
-    if [ -f "${cover_filename}" ]; then
-        rm "${cover_filename}"
+    local rc=$?
+
+    if [ -n "${cover_filename}" ]; then
+        rm -f "${cover_filename}"
     fi
 
-    return $?
+    return $rc
 
 }
 
@@ -213,7 +240,7 @@ overwrite_question() {
 
 iterate_files () {
 
-    if [ "${ask_overwrite}" = true ]; then
+    if [ "${flag_ask_overwrite}" = true ]; then
         overwrite_question
     fi
 
@@ -228,10 +255,12 @@ iterate_files () {
         local basename_file="$(basename "$file")"
 
         if [ ! -f "${file}" ]; then
-            "${kdialog_bin}" --title --icon configure "${msg_title}" --error "$(eval echo "${msg_common_file_not_found}")"
-            break
+            "${kdialog_bin}" --icon configure --title "${msg_title}" --error "$(eval echo "${msg_common_file_not_found}")"
+            ${qdbus_bin} $dbus_ref close 2>/dev/null
+            exit 2
         fi
         ${qdbus_bin} $dbus_ref org.kde.kdialog.ProgressDialog.setLabelText "$(eval echo "${msg_common_progress_text}")"
+        msg_finish_title="$(eval echo "${msg_convert_finish_title}")"
 
         case $command in
         convert)
@@ -243,9 +272,9 @@ iterate_files () {
         if [ $rc -eq 0 ]; then
             "${kdialog_bin}" --title "${msg_finish_title}" --passivepopup "${msg_common_finish_ok}" 5
         else
-            ${qdbus_bin} $dbus_ref close
+            ${qdbus_bin} $dbus_ref close 2>/dev/null
             "${kdialog_bin}" --icon configure --title "${msg_finish_title}" --detailederror "${msg_common_finish_error}" "${OUTPUT}"
-            exit 1
+            exit 2
         fi
 
         ${qdbus_bin} $dbus_ref org.freedesktop.DBus.Properties.Set org.kde.kdialog.ProgressDialog value $i
@@ -282,6 +311,7 @@ init_convert () {
         shift
     fi
 
+    flag_ask_overwrite=true
     iterate_files "${@}"
 
 }
