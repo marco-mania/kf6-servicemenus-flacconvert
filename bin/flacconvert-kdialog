@@ -241,7 +241,28 @@ overwrite_question() {
 iterate_files () {
 
     if [ "${flag_ask_overwrite}" = true ]; then
-        overwrite_question
+        # Only ask if an actual output file (base name + *target* extension,
+        # e.g. "song.mp3"/"song.opus" - never the source "song.flac" itself)
+        # already exists for one of the selected files. Otherwise there is
+        # nothing to overwrite and asking is just a false "this already
+        # exists" alarm.
+        local any_collision=false
+        local check_file candidate_dir candidate_base
+        for check_file in "$@"; do
+            candidate_dir=$(dirname -- "${check_file}")
+            candidate_base="${check_file##*/}"
+            candidate_base="${candidate_base%.*}"
+            if [ -f "${candidate_dir}/${candidate_base}.${FORMAT}" ]; then
+                any_collision=true
+                break
+            fi
+        done
+
+        if [ "${any_collision}" = true ]; then
+            overwrite_question
+        else
+            overwrite=true
+        fi
     fi
 
     file_count=$#
